@@ -6,7 +6,7 @@ Param (
 function Assign-VMGPUPartitionAdapter {
     param(
         [string] $VMName,
-        [string] $GPUName = AUTO,
+        [string] $GPUName = "AUTO",
         [decimal] $GPUResourceAllocationPercentage = 100
     )
 
