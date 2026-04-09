@@ -25,10 +25,36 @@ While ($VM.State -ne "Off") {
     }
 
 "Mounting Drive..."
-$DriveLetter = (Mount-VHD -Path $VHD.Path -PassThru | Get-Disk | Get-Partition | Get-Volume | Where-Object {$_.DriveLetter} | ForEach-Object DriveLetter)
+$WinPartition = (Mount-VHD -Path $VHD.Path -PassThru | Get-Disk | Get-Partition | Where-Object { $_.Type -eq "Basic" } | Select-Object -First 1)
 
-"Copying GPU Files - this could take a while..."
-Add-VMGPUPartitionAdapterFiles -hostname $Hostname -DriveLetter $DriveLetter -GPUName $GPUName
+if(!$WinPartition) {
+    Write-Error "Unable to find a basic partition on drive"
+    Dismount-VHD -Path $VHD.Path
+    Exit
+}
+
+$DriveLetter = $WinPartition.DriveLetter
+if (!$DriveLetter) {
+    $UsedDriveLetters = (Get-WmiObject Win32_Volume | Where-Object { $_.DriveLetter }).DriveLetter.ToUpper().TrimEnd(':')
+
+    # 68-90 = D-Z
+    for ($i = 68; $i -le 90; $i++) {
+        $DriveLetter = [char]$i
+
+        if ($UsedDriveLetters -notcontains $DriveLetter) {
+            "Assigning ${DriveLetter}: to basic partition..."
+            Set-Partition -InputObject $WinPartition -NewDriveLetter $DriveLetter
+            break
+        }
+    }
+}
+
+if (Test-Path -Path ${DriveLetter}:\\Windows) {
+    "Copying GPU Files - this could take a while..."
+    Add-VMGPUPartitionAdapterFiles -hostname $Hostname -DriveLetter $DriveLetter -GPUName $GPUName
+} else {
+    Write-Error "Mounted partition does not look like the Windows system partition"
+}
 
 "Dismounting Drive..."
 Dismount-VHD -Path $VHD.Path
